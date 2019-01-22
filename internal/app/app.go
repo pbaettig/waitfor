@@ -1,9 +1,11 @@
 package app
 
 import (
-	"errors"
 	"flag"
+	"fmt"
+	"net/http"
 	"os"
+	"os/exec"
 	"syscall"
 	"time"
 
@@ -12,21 +14,24 @@ import (
 
 // WaitCondition represents any condition that can be waited for
 type WaitCondition interface {
+	String() string
 	Fulfilled() bool
 }
 
-// PathWaitCondition is used for waiting on a path to exist
-type PathWaitCondition struct {
+// PathWait is used for waiting on a path to exist
+type PathWait struct {
 	Path string
 }
 
+func (pwc PathWait) String() string {
+	return fmt.Sprintf("PathWait:%s", pwc.Path)
+}
+
 // Fulfilled returns true if the PathWaitCondition.Path exists, false otherwise
-func (pwc PathWaitCondition) Fulfilled() bool {
+func (pwc PathWait) Fulfilled() bool {
 	if _, err := os.Stat(pwc.Path); err == nil {
-		log.Debugf("%s exists.", pwc.Path)
 		return true
 	} else if os.IsNotExist(err) {
-		log.Debugf("%s does not exist.", pwc.Path)
 		return false
 	} else {
 		// Schrodinger: file may or may not exist. See err for details.
@@ -34,47 +39,76 @@ func (pwc PathWaitCondition) Fulfilled() bool {
 	}
 }
 
-// ExecWithEnv runs args with the same environment as the parent process
-func ExecWithEnv(args []string) {
-	log.Debugf("Starting %s", args[0])
-	argv := make([]string, 0)
-	if len(args) > 1 {
-		log.Debugf("Args: %v", argv)
-		argv = flag.Args()[1:]
-	}
+type HTTPWait struct {
+	URL                   string
+	AcceptableStatusCodes []int
+}
 
-	err := syscall.Exec(args[0], argv, os.Environ())
+func (hwc HTTPWait) String() string {
+	return fmt.Sprintf("HTTPWait:%s", hwc.URL)
+}
+
+func (hwc HTTPWait) Fulfilled() bool {
+	resp, err := http.Get(hwc.URL)
 	if err != nil {
-		log.Fatalf("Unable to start %s: %s", args[0], err)
+		return false
 	}
+	resp.Body.Close()
+	for _, s := range hwc.AcceptableStatusCodes {
+		if resp.StatusCode == s {
+			return true
+		}
+	}
+	return false
 }
 
 // Wait waits until the passed WaitCondition is fulfilled.
 // It returns an error if it timed out
-func Wait(wc WaitCondition, interval, timeout time.Duration) error {
+func Wait(wc WaitCondition, interval, timeout time.Duration, result chan<- bool) {
 	maxIterations := int(timeout / interval)
 	i := 0
+
 	for {
+
 		loopStart := time.Now()
 		if wc.Fulfilled() {
-			break
+			log.WithField("condition", wc.String()).Debugf("Check succeeded")
+			result <- true
+			return
 		}
+		log.WithField("condition", wc.String()).Debugf("Check failed")
+
 		if i >= maxIterations {
-			goto timedOut
+			log.WithField("condition", wc.String()).Debugf("Timed out")
+			result <- false
+			return
 		}
 
 		loopDuration := time.Now().Sub(loopStart)
 		if loopDuration < interval {
 			sleepFor := interval - loopDuration
-			log.Debugf("Sleeping for %s", sleepFor)
+			//log.Debugf("Sleeping for %s", sleepFor)
 			time.Sleep(sleepFor)
 		}
-		log.Debug("Waiting")
+		//log.Debug("Waiting")
 
 		i++
-	}
-	return nil
 
-timedOut:
-	return errors.New("wait timed out")
+	}
+}
+
+// ExecWithEnv runs args with the same environment as the parent process
+func ExecWithEnv(args []string) {
+	cmd, _ := exec.LookPath(args[0])
+
+	argv := make([]string, 0)
+	if len(args) > 1 {
+		argv = flag.Args()[1:]
+	}
+	log.Debugf("Starting %s with args %q", cmd, argv)
+
+	err := syscall.Exec(cmd, args, os.Environ())
+	if err != nil {
+		log.Fatalf("Unable to start %s: %s", cmd, err)
+	}
 }
