@@ -76,6 +76,10 @@ func (i *udpWaits) Set(value string) error {
 	return nil
 }
 
+const (
+	Version = "0.1"
+)
+
 var (
 	httpConditions            httpWaits
 	pathConditions            pathWaits
@@ -85,19 +89,25 @@ var (
 	andFlag                   bool
 	orFlag                    bool
 	debugFlag                 bool
+	versionFlag               bool
 )
 
 func init() {
-	flag.Var(&httpConditions, "http", "usage")
-	flag.Var(&pathConditions, "path", "usage")
-	flag.Var(&tcpConditions, "tcp", "usage")
-	flag.Var(&udpConditions, "udp", "usage")
-	flag.DurationVar(&timeoutFlag, "timeout", 5*time.Minute, "usage")
-	flag.DurationVar(&intervalFlag, "interval", 10*time.Second, "usage")
-	flag.BoolVar(&andFlag, "and", false, "usage")
-	flag.BoolVar(&orFlag, "or", false, "usage")
-	flag.BoolVar(&debugFlag, "debug", false, "usage")
+	flag.Var(&httpConditions, "http", "Wait for `url` to respond with 2xx")
+	flag.Var(&pathConditions, "path", "Wait for `path` to exist")
+	flag.Var(&tcpConditions, "tcp", "Wait for `host:port` to accept connection")
+	flag.Var(&udpConditions, "udp", "Wait for `host:port` to respond with at least 1 byte")
+	flag.DurationVar(&timeoutFlag, "timeout", 5*time.Minute, "max `duration` to wait for")
+	flag.DurationVar(&intervalFlag, "interval", 10*time.Second, "`duration` between checks")
+	flag.BoolVar(&andFlag, "and", false, "AND all conditions (default)")
+	flag.BoolVar(&orFlag, "or", false, "OR all conditions")
+	flag.BoolVar(&debugFlag, "debug", false, "enable verbose logging")
+	flag.BoolVar(&versionFlag, "version", false, "print version and exit")
 	flag.Parse()
+
+	if versionFlag {
+		fmt.Printf("wfor v%s\n", Version)
+	}
 
 	if andFlag && orFlag {
 		log.Fatal("Cannot specify both -and / -or")
