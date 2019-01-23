@@ -1,8 +1,10 @@
 package app
 
 import (
+	"errors"
 	"flag"
 	"fmt"
+	"net"
 	"net/http"
 	"os"
 	"os/exec"
@@ -15,7 +17,7 @@ import (
 // WaitCondition represents any condition that can be waited for
 type WaitCondition interface {
 	String() string
-	Fulfilled() bool
+	Check() error
 }
 
 // PathWait is used for waiting on a path to exist
@@ -28,14 +30,11 @@ func (pwc PathWait) String() string {
 }
 
 // Fulfilled returns true if the PathWaitCondition.Path exists, false otherwise
-func (pwc PathWait) Fulfilled() bool {
+func (pwc PathWait) Check() error {
 	if _, err := os.Stat(pwc.Path); err == nil {
-		return true
-	} else if os.IsNotExist(err) {
-		return false
+		return nil
 	} else {
-		// Schrodinger: file may or may not exist. See err for details.
-		return false
+		return err
 	}
 }
 
@@ -48,18 +47,59 @@ func (hwc HTTPWait) String() string {
 	return fmt.Sprintf("HTTPWait:%s", hwc.URL)
 }
 
-func (hwc HTTPWait) Fulfilled() bool {
+func (hwc HTTPWait) Check() error {
 	resp, err := http.Get(hwc.URL)
 	if err != nil {
-		return false
+		return err
 	}
 	resp.Body.Close()
 	for _, s := range hwc.AcceptableStatusCodes {
 		if resp.StatusCode == s {
-			return true
+			return nil
 		}
 	}
-	return false
+	return errors.New(fmt.Sprintf("received status %d is not accepted", resp.StatusCode))
+}
+
+type TCPWait struct {
+	HostPort       string
+	ConnectTimeout time.Duration
+}
+
+func (tcw TCPWait) String() string {
+	return fmt.Sprintf("TCPWait:%s", tcw.HostPort)
+}
+func (tcw TCPWait) Check() error {
+	conn, err := net.DialTimeout("tcp", tcw.HostPort, tcw.ConnectTimeout)
+	if err != nil {
+		return err
+	}
+	conn.Close()
+	return nil
+}
+
+type UDPWait struct {
+	HostPort    string
+	ReadTimeout time.Duration
+}
+
+func (udw UDPWait) String() string {
+	return fmt.Sprintf("UDPWait:%s", udw.HostPort)
+}
+func (udw UDPWait) Check() error {
+	conn, cerr := net.Dial("udp", udw.HostPort)
+	conn.SetDeadline(time.Now().Add(udw.ReadTimeout))
+	if cerr != nil {
+		return cerr
+	}
+	fmt.Fprintf(conn, "HELLO\r\n\r\n")
+	rbuf := make([]byte, 8)
+	_, rerr := conn.Read(rbuf)
+	if rerr != nil {
+		return rerr
+	}
+	conn.Close()
+	return nil
 }
 
 // Wait waits until the passed WaitCondition is fulfilled.
@@ -71,15 +111,20 @@ func Wait(wc WaitCondition, interval, timeout time.Duration, result chan<- bool)
 	for {
 
 		loopStart := time.Now()
-		if wc.Fulfilled() {
-			log.WithField("condition", wc.String()).Debugf("Check succeeded")
+		if err := wc.Check(); err != nil {
+			log.WithFields(log.Fields{
+				"wait":  wc.String(),
+				"error": err.Error(),
+			}).Debug("Check failed")
+
+		} else {
+			log.WithField("wait", wc.String()).Debugf("Check succeeded")
 			result <- true
 			return
 		}
-		log.WithField("condition", wc.String()).Debugf("Check failed")
 
 		if i >= maxIterations {
-			log.WithField("condition", wc.String()).Debugf("Timed out")
+			log.WithField("wait", wc.String()).Debugf("Timed out")
 			result <- false
 			return
 		}
@@ -87,13 +132,10 @@ func Wait(wc WaitCondition, interval, timeout time.Duration, result chan<- bool)
 		loopDuration := time.Now().Sub(loopStart)
 		if loopDuration < interval {
 			sleepFor := interval - loopDuration
-			//log.Debugf("Sleeping for %s", sleepFor)
 			time.Sleep(sleepFor)
 		}
-		//log.Debug("Waiting")
 
 		i++
-
 	}
 }
 
