@@ -4,8 +4,8 @@ waitfor (or wfor) waits until some condition is fulfilled and then either execs 
 
 - `-path PATH`: Wait until `PATH` can be sucessfully `stat`-ed
 - `-http URL`: Wait until a request to `URL` completes with a 2xx status code
-- `-tcp HOSTPORT`: Wait until a connection to `HOSTPORT` can be established. The connection timeout is currently hard-coded to 1 second
-- `-udp HOSTPORT`: Wait until at least one byte could be read from `HOSTPORT`. The read timeout is currentyl hard-coded to 1 second
+- `-tcp HOSTPORT`: Wait until a connection to `HOSTPORT` can be established. The connection timeout is currently hard-coded to 500ms
+- `-udp HOSTPORT`: Wait until at least one byte could be read from `HOSTPORT`. The read timeout is currently hard-coded to 500ms
 
 Any number of these conditions can be specified. Use the `-and` / `-or` flags to control how they will be evaluated. `-and` / `-or` affect all conditions, so you can either wait until all conditions or any one of them are fulfilled. By default conditions are and-ed.
 
