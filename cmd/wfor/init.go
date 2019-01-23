@@ -35,7 +35,11 @@ func (i *httpWaits) Set(value string) error {
 	} else {
 		url = value
 	}
-	*i = append(*i, app.HTTPWait{URL: url, AcceptableStatusCodes: []int{201, 202, 203, 204}})
+	*i = append(*i,
+		app.HTTPWait{
+			URL:                   url,
+			AcceptableStatusCodes: []int{200, 201, 202, 203, 204, 205, 206, 207, 208, 226},
+		})
 	return nil
 }
 
