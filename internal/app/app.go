@@ -48,7 +48,10 @@ func (hwc HTTPWait) String() string {
 }
 
 func (hwc HTTPWait) Check() error {
-	resp, err := http.Get(hwc.URL)
+	client := http.Client{
+		Timeout: 1 * time.Second,
+	}
+	resp, err := client.Get(hwc.URL)
 	if err != nil {
 		return err
 	}
