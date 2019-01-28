@@ -1,13 +1,14 @@
 package app
 
 import (
-	"errors"
 	"flag"
 	"fmt"
+	"io/ioutil"
 	"net"
 	"net/http"
 	"os"
 	"os/exec"
+	"regexp"
 	"syscall"
 	"time"
 
@@ -41,6 +42,7 @@ func (pwc PathWait) Check() error {
 type HTTPWait struct {
 	URL                   string
 	AcceptableStatusCodes []int
+	ContentMatch          *regexp.Regexp
 }
 
 func (hwc HTTPWait) String() string {
@@ -55,13 +57,42 @@ func (hwc HTTPWait) Check() error {
 	if err != nil {
 		return err
 	}
-	resp.Body.Close()
-	for _, s := range hwc.AcceptableStatusCodes {
-		if resp.StatusCode == s {
+	defer resp.Body.Close()
+	var statusAccepted bool
+
+	if hwc.AcceptableStatusCodes != nil {
+		for _, s := range hwc.AcceptableStatusCodes {
+			if resp.StatusCode == s {
+				statusAccepted = true
+			}
+		}
+	} else {
+		statusAccepted = true
+	}
+
+	if statusAccepted {
+		if hwc.ContentMatch != nil {
+			bodyBytes, err := ioutil.ReadAll(resp.Body)
+			if err != nil {
+				return err
+			}
+			match := hwc.ContentMatch.Find(bodyBytes)
+			if len(match) > 0 {
+				// ContentMatch succeeded and the HTTP status was accepted as well
+				// -> Check successful
+				return nil
+			} else {
+				return fmt.Errorf("the response did not match '%s'", hwc.ContentMatch)
+			}
+		} else {
+			// Status was accepted and no ContentMatch was specified
+			// -> Check successful
 			return nil
 		}
+	} else {
+		return fmt.Errorf("received status %d is not accepted", resp.StatusCode)
 	}
-	return errors.New(fmt.Sprintf("received status %d is not accepted", resp.StatusCode))
+
 }
 
 type TCPWait struct {
@@ -144,16 +175,18 @@ func Wait(wc WaitCondition, interval, timeout time.Duration, result chan<- bool)
 
 // ExecWithEnv runs args with the same environment as the parent process
 func ExecWithEnv(args []string) {
-	cmd, _ := exec.LookPath(args[0])
-
+	cmd, err := exec.LookPath(args[0])
+	if err != nil {
+		log.Fatalln(err)
+	}
 	argv := make([]string, 0)
 	if len(args) > 1 {
 		argv = flag.Args()[1:]
 	}
-	log.Debugf("Starting %s with args %q", cmd, argv)
+	log.Debugf("Executing %s with args %q", cmd, argv)
 
-	err := syscall.Exec(cmd, args, os.Environ())
+	err2 := syscall.Exec(cmd, args, os.Environ())
 	if err != nil {
-		log.Fatalf("Unable to start %s: %s", cmd, err)
+		log.Fatalf("Unable to execute %s: %s", cmd, err2)
 	}
 }

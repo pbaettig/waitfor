@@ -19,8 +19,7 @@ func TestHttpCodeListParse(t *testing.T) {
 	}
 
 	for _, testCase := range table {
-		hcl := httpCodeList(testCase.in)
-		got, err := hcl.Parse()
+		got, err := parseCodes(testCase.in)
 
 		if err == nil && testCase.err {
 			// We don't have an error but should have one
