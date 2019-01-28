@@ -30,4 +30,7 @@ wfor -http "http://some-service.acme.org:8080/secret|200-208,226|Authenticated a
 
 # Check URL, accept any status, require "Hello" in response body
 wfor -http "http://some-service.acme.org:8080/secret||Hello" && echo "Greeting received"
+
+# Check URL, accept any status, any content
+wfor -http "http://some-service.acme.org:8080/" && echo "Seems up"
 ```
