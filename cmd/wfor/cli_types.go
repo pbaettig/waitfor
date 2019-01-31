@@ -56,6 +56,9 @@ func (i *udpWaits) Set(value string) error {
 }
 
 func parseCodes(hcl string) ([]int, error) {
+	if hcl == "" {
+		return nil, fmt.Errorf("cannot parse empty string")
+	}
 	codes := make([]int, 0)
 	for _, s := range strings.Split(string(hcl), ",") {
 		s = strings.TrimSpace(s)
@@ -97,11 +100,10 @@ func (i *httpWaits) String() string {
 	return "String"
 }
 func (i *httpWaits) Set(value string) error {
-	split := strings.Split(value, "|")
-
-	if len(split) == 0 {
+	if len(value) == 0 {
 		return fmt.Errorf("string is empty")
 	}
+	split := strings.Split(value, "|")
 
 	htw := new(app.HTTPWait)
 	if strings.HasPrefix(split[0], "http") {
@@ -112,9 +114,11 @@ func (i *httpWaits) Set(value string) error {
 
 	if len(split) >= 2 {
 		cs, err := parseCodes(split[1])
-
 		if err == nil && len(cs) > 0 {
 			htw.AcceptableStatusCodes = cs
+		} else if err != nil && len(split[1]) > 0 {
+			// Codes were specified but couldn't be parsed
+			return err
 		}
 	}
 	if len(split) == 3 {
