@@ -32,18 +32,20 @@ def run_http_server(port, resp_status=200, resp_msg="testtesttest"):
     httpd = HTTPServer(server_address, myhandler)
     httpd.handle_request()
 
-
-class TestFailedException(Exception):
-    pass
-
-
 def build():
     current_dir = os.path.dirname(os.path.abspath(__file__))
     build_dir = os.path.join(os.path.dirname(current_dir), 'build')
-    print(build_dir)
-    out = subprocess.check_output(['./build.sh'], cwd=build_dir)
-    print(out)
-    #subprocess.call('go build -o wfor ../cmd/wfor/*.go', shell=True)
+    cmd = ['./build.sh']
+    p = subprocess.Popen(cmd, cwd=build_dir, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+    out, err = p.communicate()
+    if p.returncode == 0:
+        path = out.split(b' ')[2].decode().strip()
+        return path
+    else:
+        raise subprocess.CalledProcessError(p.returncode, cmd, stderr=err, output=out)
+
+class TestFailedException(Exception):
+    pass
 
 
 class DelayedTempFile(object):
@@ -286,14 +288,16 @@ class HttpWaitContentSuccessWhileWaitingExec(WforTest):
             return r
 
 
+
+
 if __name__ == '__main__':
     if len(sys.argv) < 2:
         print("Building wfor...")
-        build()
-        exit(0)
+        WforTest.executable_under_test = build()
     else:
-        print("Running tests against {}".format(sys.argv[1]))
         WforTest.executable_under_test = sys.argv[1]
+
+    print('Running tests against {}'.format(WforTest.executable_under_test))
 
     tests = [
         HttpWaitStatusSuccessWhileWaitingExec(),
@@ -321,7 +325,4 @@ if __name__ == '__main__':
         exit(1)
     else:
         exit(0)
-    #test_path_condition_fulfilled_during_wait()
-    # test_timeout()
-    # test_exec()
-    # test_no_exec()
+
