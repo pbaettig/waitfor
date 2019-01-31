@@ -30,5 +30,5 @@ sed -E -i "s/Commit([[:space:]]*)= .*/Commit\1= \"$COMMIT_ID\"/g" ../cmd/wfor/ve
 sed -E -i "s/Tag([[:space:]]*)= .*/Tag\1= \"$TAG\"/g" ../cmd/wfor/version.go
 sed -E -i "s/BuildDate([[:space:]]*)= .*/BuildDate\1= \"$(date +"%Y-%m-%dT%H:%M:%S")\"/g" ../cmd/wfor/version.go
 
-(cd ../cmd/wfor; go build -o $FNAME)
+(cd ../cmd/wfor; go build -ldflags="-s -w" -o $FNAME)
 echo "Successfully built $FNAME"
